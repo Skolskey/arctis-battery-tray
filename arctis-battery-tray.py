@@ -11,21 +11,40 @@ DBUS_DEST = "name.giacomofurlan.ArctisManager.Next"
 DBUS_PATH = "/name/giacomofurlan/ArctisManager/Next/Status"
 DBUS_IFACE = "name.giacomofurlan.ArctisManager.Next.Status"
 
-def get_battery():
+def get_status():
     try:
         bus = dbus.SessionBus()
         obj = bus.get_object(DBUS_DEST, DBUS_PATH)
         iface = dbus.Interface(obj, DBUS_IFACE)
         data = json.loads(iface.GetStatus())
-        return data["headset"]["headset_battery_charge"]["value"]
+        headset = data["headset"]
+        connected = headset["headset_power_status"]["value"] == "on"
+        percent = headset["headset_battery_charge"]["value"] if connected else None
+        return percent, connected
     except Exception:
-        return None
+        return None, False
 
-def make_icon(percent):
+def make_icon(percent, connected):
     SIZE = 256
     BORDER = int(SIZE / 16)
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
+
+    if not connected:
+        # Gray ring + "—" symbol
+        draw.pieslice([0, 0, SIZE - 1, SIZE - 1], -90, 270, fill=(50, 50, 50, 255))
+        draw.ellipse([BORDER, BORDER, SIZE - 1 - BORDER, SIZE - 1 - BORDER], fill=(20, 20, 20, 200))
+        text = "—"
+        font_size = int(0.56 * SIZE)
+        try:
+            font = ImageFont.truetype("/usr/share/fonts/TTF/DejaVuSans-Bold.ttf", font_size)
+        except Exception:
+            font = ImageFont.load_default()
+        bbox = draw.textbbox((0, 0), text, font=font)
+        x = (SIZE - (bbox[2] - bbox[0])) / 2 - bbox[0]
+        y = (SIZE - (bbox[3] - bbox[1])) / 2 - bbox[1] - int(0.047 * SIZE)
+        draw.text((x, y), text, font=font, fill=(120, 120, 120, 255))
+        return img.resize((64, 64), Image.Resampling.LANCZOS)
 
     text = str(percent) if percent is not None else "?"
 
@@ -61,17 +80,19 @@ def make_icon(percent):
 
     return img.resize((64, 64), Image.Resampling.LANCZOS)
 
-def make_title(percent):
+def make_title(percent, connected):
+    if not connected:
+        return "Arctis Nova 7X: отключено"
     if percent is None:
         return "Arctis Nova 7X: недоступно"
     return f"Arctis Nova 7X: {percent}%"
 
 def run_tray():
-    percent = get_battery()
+    percent, connected = get_status()
     icon = pystray.Icon(
         "arctis-battery",
-        make_icon(percent),
-        make_title(percent),
+        make_icon(percent, connected),
+        make_title(percent, connected),
         menu=pystray.Menu(
             pystray.MenuItem("Выход", lambda icon, _: icon.stop())
         )
@@ -79,17 +100,15 @@ def run_tray():
 
     def update_loop():
         while True:
-            p = get_battery()
-            icon.icon = make_icon(p)
-            icon.title = make_title(p)
+            p, c = get_status()
+            icon.icon = make_icon(p, c)
+            icon.title = make_title(p, c)
             threading.Event().wait(30)
 
     t = threading.Thread(target=update_loop, daemon=True)
     t.start()
     icon.run()
 
-def on_status_changed(status_json):
-    pass  # update_loop handles polling; signal is a bonus trigger
 
 if __name__ == "__main__":
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
