@@ -20,11 +20,12 @@ def get_status():
         headset = data["headset"]
         connected = headset["headset_power_status"]["value"] == "on"
         percent = headset["headset_battery_charge"]["value"] if connected else None
-        return percent, connected
+        charging = headset.get("cable_charging", {}).get("value") is not None
+        return percent, connected, charging
     except Exception:
-        return None, False
+        return None, False, False
 
-def make_icon(percent, connected):
+def make_icon(percent, connected, charging=False):
     SIZE = 256
     BORDER = int(SIZE / 16)
     img = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
@@ -48,7 +49,9 @@ def make_icon(percent, connected):
 
     text = str(percent) if percent is not None else "?"
 
-    if percent is None:
+    if charging:
+        arc_color = (0, 200, 200, 255)
+    elif percent is None:
         arc_color = (128, 128, 128, 255)
     elif percent > 60:
         arc_color = (80, 200, 80, 255)
@@ -80,19 +83,21 @@ def make_icon(percent, connected):
 
     return img.resize((64, 64), Image.Resampling.LANCZOS)
 
-def make_title(percent, connected):
+def make_title(percent, connected, charging=False):
     if not connected:
         return "Arctis Nova 7X: отключено"
     if percent is None:
         return "Arctis Nova 7X: недоступно"
+    if charging:
+        return f"Arctis Nova 7X: {percent}% (заряжается)"
     return f"Arctis Nova 7X: {percent}%"
 
 def run_tray():
-    percent, connected = get_status()
+    percent, connected, charging = get_status()
     icon = pystray.Icon(
         "arctis-battery",
-        make_icon(percent, connected),
-        make_title(percent, connected),
+        make_icon(percent, connected, charging),
+        make_title(percent, connected, charging),
         menu=pystray.Menu(
             pystray.MenuItem("Выход", lambda icon, _: icon.stop())
         )
@@ -100,9 +105,9 @@ def run_tray():
 
     def update_loop():
         while True:
-            p, c = get_status()
-            icon.icon = make_icon(p, c)
-            icon.title = make_title(p, c)
+            p, c, ch = get_status()
+            icon.icon = make_icon(p, c, ch)
+            icon.title = make_title(p, c, ch)
             threading.Event().wait(30)
 
     t = threading.Thread(target=update_loop, daemon=True)
