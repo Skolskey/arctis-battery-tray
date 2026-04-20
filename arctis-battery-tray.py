@@ -20,7 +20,7 @@ def get_status():
         headset = data["headset"]
         connected = headset["headset_power_status"]["value"] == "on"
         percent = headset["headset_battery_charge"]["value"] if connected else None
-        charging = headset.get("cable_charging", {}).get("value") is not None
+        charging = headset.get("cable_charging", {}).get("value") == "on"
         return percent, connected, charging
     except Exception:
         return None, False, False
@@ -85,11 +85,11 @@ def make_icon(percent, connected, charging=False):
 
 def make_title(percent, connected, charging=False):
     if not connected:
-        return "Arctis Nova 7X: отключено"
+        return "Arctis Nova 7X: disconnected"
     if percent is None:
-        return "Arctis Nova 7X: недоступно"
+        return "Arctis Nova 7X: unavailable"
     if charging:
-        return f"Arctis Nova 7X: {percent}% (заряжается)"
+        return f"Arctis Nova 7X: {percent}% (charging)"
     return f"Arctis Nova 7X: {percent}%"
 
 def run_tray():
@@ -99,7 +99,7 @@ def run_tray():
         make_icon(percent, connected, charging),
         make_title(percent, connected, charging),
         menu=pystray.Menu(
-            pystray.MenuItem("Выход", lambda icon, _: icon.stop())
+            pystray.MenuItem("Quit", lambda icon, _: icon.stop())
         )
     )
 
